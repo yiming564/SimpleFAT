@@ -1,1 +1,8 @@
+# ignore big image file.
 /sandbox/raw.img
+
+# ignore built object
+/build
+
+# miscs
+/.vscode
