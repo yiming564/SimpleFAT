@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <sys/stat.h>
-#include <config.h>
 
 #define MK_U32(x, y)	((x) << 16 | (y))
 
@@ -19,7 +18,6 @@ struct FileSystem
 private:
 	int fd; struct stat st;
 public:
-	uint8_t *img, *Data;
 	struct BootSector
 	{
 		uint8_t jmp[3];
@@ -58,6 +56,7 @@ public:
 		uint8_t BootLoader[420];
 		uint16_t MagicNumber;
 	} __attribute__((packed)) *BS;
+
 	struct ShortEntry
 	{
 		struct ShortEntryProperty
@@ -69,20 +68,20 @@ public:
 			uint8_t Directory:1;
 			uint8_t Archive:1;
 		} __attribute__((packed));
-		struct alignas(1) Time
+		struct Time
 		{
 			uint8_t HalfSecond:5;
 			uint8_t Minute:6;
 			uint8_t Hour:5;
-		};
-		struct alignas(1) Date
+		} __attribute__((packed));
+		struct Date
 		{
 			uint8_t Day:5;
 			uint8_t Month:4;
 			uint8_t YearSince1980:7;
-		};
-		char FileName[8];
-		char ExtName[3];
+		} __attribute__((packed));
+		char Filename1[8];
+		char Filename2[3];
 		ShortEntryProperty Property;
 		uint8_t NTReserved;
 		uint8_t MilliSecond10;
@@ -94,10 +93,55 @@ public:
 		Date ModifiedDate;
 		uint16_t LowClusterNumber;
 		uint32_t FileSize;
-		inline uint32_t ClusterNumber();
-		inline time_t CreatedTimestamp();
-		inline time_t ModifiedTimestamp();
-		inline time_t VisitedTimestamp();
+		inline uint32_t ClusterNumber()
+		{
+			return (uint32_t)HighClusterNumber << 16 | LowClusterNumber;
+		}
+		inline time_t CreatedTimestamp()
+		{
+			tm t = {
+				CreatedTime.HalfSecond * 2 + MilliSecond10 / 100,
+				CreatedTime.Minute,
+				CreatedTime.Hour,
+				CreatedDate.Day,
+				CreatedDate.Month - 1,
+				CreatedDate.YearSince1980 + 80,
+			};
+			return timegm(&t);
+		}
+		inline time_t ModifiedTimestamp()
+		{
+			tm t = {
+				ModifiedTime.HalfSecond * 2,
+				ModifiedTime.Minute,
+				ModifiedTime.Hour,
+				ModifiedDate.Day,
+				ModifiedDate.Month - 1,
+				ModifiedDate.YearSince1980 + 80,
+			};
+			return timegm(&t);
+		}
+		inline time_t VisitedTimestamp()
+		{
+			tm t = {
+				0, 0, 0, 			// FAT32 不记录访问的时间
+				VisitedDate.Day,
+				VisitedDate.Month - 1,
+				VisitedDate.YearSince1980 + 80,
+			};
+			return timegm(&t);
+		}
+		inline std::string &Filename()
+		{
+			auto s = new std::string();
+			int i = 10;
+			for (; i >= 8 && Filename1[i] == ' '; i--);
+			for (; i >= 8; i--)	*s = Filename1[i] + *s;
+			if (!s->empty())	*s = '.' + *s;
+			for (; i >= 0 && Filename1[i] == ' '; i--);
+			for (; i >= 0; i--)	*s = Filename1[i] + *s;
+			return *s;
+		}
 	} __attribute__((packed));
 	struct LongEntry
 	{
@@ -112,34 +156,77 @@ public:
 			uint8_t Reserved2:1;
 		} __attribute__((packed));
 		LongEntryProperty Property;
-		char16_t FileName1[5];
+		char16_t Filename1[5];
 		uint8_t MagicNumber; 		// 0x0f
 	private:
 		uint8_t Reserved1;
 	public:
 		uint8_t Checksum;
-		char16_t FileName2[6];
+		char16_t Filename2[6];
 		uint16_t LowClusterNumber;	// Always be 0x0000.
-		char16_t FileName3[2];
-		inline char16_t *FileName(char16_t *buf);
+		char16_t Filename3[2];
+		inline char16_t *Filename(char16_t *buf)
+		{
+			__builtin_memcpy(&buf[0], Filename1, sizeof(Filename1));
+			__builtin_memcpy(&buf[5], Filename2, sizeof(Filename2));
+			__builtin_memcpy(&buf[11], Filename3, sizeof(Filename3));
+			return buf;
+		}
 	} __attribute__((packed));
 	union FileEntry
 	{
 		ShortEntry SE;
 		LongEntry LE;
-		inline bool IsErased();
-		inline bool IsNULL();
-		inline bool IsLFN();
+		inline bool IsErased()	{ return SE.Filename1[0] == 0xe5; }
+		inline bool IsNULL()		{ return SE.Filename1[0] == 0x00; }
+		inline bool IsLFN()		{ return LE.MagicNumber == 0x0f; }
 	} __attribute__((packed));
+
+	uint8_t *img, *Data;
 	uint32_t *FAT, *FATBackup;
 	uint32_t BytesPerCluster;
-	inline void *OffsetBySector(uint32_t Sectors);
-	inline void *OffsetByCluster(uint32_t Clusters);
-	inline void *OffsetBySector(void *Base, uint32_t Sectors);
-	inline void *OffsetByCluster(void *Base, uint32_t Clusters);
-	FileSystem(const char *FileName);
+	FileSystem(const char *Filename);
 	~FileSystem();
+	inline void *OffsetBySector(uint32_t Sectors)				{ return (uint8_t *)Data + Sectors * BS->BytesPerSector; }
+	inline void *OffsetByCluster(uint32_t Clusters)				{ return (uint8_t *)Data + (Clusters - 2) * BS->BytesPerSector * BS->SectorsPerCluster;	}
+	inline void *OffsetBySector(void *Base, uint32_t Sectors)	{ return (uint8_t *)Base + Sectors * BS->BytesPerSector; }
+	inline void *OffsetByCluster(void *Base, uint32_t Clusters)	{ return (uint8_t *)Base + (Clusters - 2) * BS->BytesPerSector * BS->SectorsPerCluster; }
+	struct Directory &OpenRoot();
 };
-extern FileSystem *DefaultFS;
+
+struct FileBase
+{
+protected:
+	FileSystem *FS;
+	uint8_t *Data;
+public:
+	uint32_t ClusterBase;
+	uint32_t FileSize;
+	std::string Filename;	// 微软你 TM 用什么 UTF-16，害得我还要转码。
+	time_t CreatedTime, ModifiedTime, VisitedTime;
+	FileBase();
+	FileBase(FileSystem *fs);
+	~FileBase();
+	uint32_t Load();
+	FileBase &PrintDebugInfo();
+};
+struct Directory : public FileBase
+{
+protected:
+	FileSystem::FileEntry *FDT;
+public:
+	Directory();
+	Directory(const FileBase &raw);
+	std::map<std::string, FileBase> Child;
+	Directory &Load();
+};
+struct File : public FileBase
+{
+public:
+	File();
+	File(const FileBase &raw);
+	inline const uint8_t *Raw() const { return Data; }
+	File &Load();
+};
 
 #endif
