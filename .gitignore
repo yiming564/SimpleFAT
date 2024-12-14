@@ -1,5 +1,6 @@
-# ignore big image file.
+# ignore image file.
 /sandbox/raw.img
+/sandbox/dump
 
 # ignore built object
 /build
