@@ -82,10 +82,20 @@ public:
 			uint8_t Month:4;
 			uint8_t YearSince1980:7;
 		} __attribute__((packed));
+		struct NTExt
+		{
+		private:
+			uint8_t Reserved1:3;
+		public:
+			uint8_t LowerCaseFilename1:1;
+			uint8_t LowerCaseFilename2:1;
+		private:
+			uint8_t Reserved2:3;
+		} __attribute__((packed));
 		char Filename1[8];
 		char Filename2[3];
 		ShortEntryProperty Property;
-		uint8_t NTReserved;
+		NTExt NTReserved;
 		uint8_t MilliSecond10;
 		Time CreatedTime;
 		Date CreatedDate;
@@ -133,16 +143,16 @@ public:
 			};
 			return timegm(&t);
 		}
-		inline std::string &Filename()
+		inline std::string Filename()
 		{
-			auto s = new std::string();
-			int i = 10;
-			for (; i >= 8 && Filename1[i] == ' '; i--);
-			for (; i >= 8; i--)	*s = Filename1[i] + *s;
-			if (!s->empty())	*s = '.' + *s;
-			for (; i >= 0 && Filename1[i] == ' '; i--);
-			for (; i >= 0; i--)	*s = Filename1[i] + *s;
-			return *s;
+			std::string Name, Ext;
+			int p;
+			for (p = 7; p >= 0 && Filename1[p] == ' '; p--);
+			for (int i = 0; i <= p; i++) Name += Filename1[i] + ('a' - 'A') * NTReserved.LowerCaseFilename1;
+			for (p = 2; p >= 0 && Filename2[p] == ' '; p--);
+			for (int i = 0; i <= p; i++) Ext += Filename2[i] + ('a' - 'A') * NTReserved.LowerCaseFilename2;
+			if (!Ext.empty()) Name += '.', Name += Ext;
+			return Name;
 		}
 	} __attribute__((packed));
 	struct LongEntry
