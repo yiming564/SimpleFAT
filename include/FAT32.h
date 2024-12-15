@@ -179,8 +179,9 @@ public:
 	{
 		ShortEntry SE;
 		LongEntry LE;
+		inline bool IsDirLink()	{ return SE.Filename1[0] == 0x2e; }
 		inline bool IsErased()	{ return SE.Filename1[0] == 0xe5; }
-		inline bool IsNULL()		{ return SE.Filename1[0] == 0x00; }
+		inline bool IsNULL()	{ return SE.Filename1[0] == 0x00; }
 		inline bool IsLFN()		{ return LE.MagicNumber == 0x0f; }
 	} __attribute__((packed));
 

@@ -35,7 +35,6 @@ FileBase &FileSystem::OpenRoot()
 	auto Root = new FileBase(this);
 	Root->ClusterBase = BS->RootClusterNumber;
 	Root->Property.Directory = 1;
-	Root->Load();
 	return *Root;
 }
 
