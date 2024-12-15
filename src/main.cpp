@@ -7,9 +7,9 @@ int main()
 {
 	auto Root = FS.OpenRoot();
 	Root.Load();
-	auto sub = Directory(Root.Child["SubDataLongName"]);
+	auto sub = Root.Child["SubDataLongName"];
 	sub.Load();
-	auto Text = File(Root.Child["test.txt"]);
+	auto Text = Root.Child["test.txt"];
 	Text.Load();
 	printf("%s", Text.Raw());
 	return 0;

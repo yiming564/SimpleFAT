@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
+template <typename K, typename V> using hashmap = std::map<K, V>;
+
 #define MK_U32(x, y)	((x) << 16 | (y))
 
 inline bool IsFree(uint32_t Cluster);
@@ -191,7 +193,7 @@ public:
 	inline void *OffsetByCluster(uint32_t Clusters)				{ return (uint8_t *)Data + (Clusters - 2) * BS->BytesPerSector * BS->SectorsPerCluster;	}
 	inline void *OffsetBySector(void *Base, uint32_t Sectors)	{ return (uint8_t *)Base + Sectors * BS->BytesPerSector; }
 	inline void *OffsetByCluster(void *Base, uint32_t Clusters)	{ return (uint8_t *)Base + (Clusters - 2) * BS->BytesPerSector * BS->SectorsPerCluster; }
-	struct Directory &OpenRoot();
+	struct FileBase &OpenRoot();
 };
 
 struct FileBase
@@ -199,33 +201,20 @@ struct FileBase
 protected:
 	FileSystem *FS;
 	uint8_t *Data;
+	FileSystem::FileEntry *FDT;
 public:
+	FileSystem::ShortEntry::ShortEntryProperty Property;
 	uint32_t ClusterBase;
 	uint32_t FileSize;
 	std::string Filename;	// 微软你 TM 用什么 UTF-16，害得我还要转码。
 	time_t CreatedTime, ModifiedTime, VisitedTime;
+	hashmap<std::string, FileBase> Child;
 	FileBase();
 	FileBase(FileSystem *fs);
 	~FileBase();
-	uint32_t Load();
+	FileBase &Load();
 	FileBase &PrintDebugInfo();
-};
-struct Directory : public FileBase
-{
-protected:
-	FileSystem::FileEntry *FDT;
-public:
-	Directory();
-	Directory(const FileBase &raw);
-	std::map<std::string, FileBase> Child;
-	Directory &Load();
-};
-struct File : public FileBase
-{
-public:
-	File(const FileBase &raw);
 	inline const uint8_t *Raw() const { return Data; }
-	File &Load();
 };
 
 #endif

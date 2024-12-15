@@ -30,21 +30,31 @@ FileSystem::~FileSystem()
 	munmap(img, st.st_size), close(fd);
 	printf("Image Closed.\n");
 }
-Directory &FileSystem::OpenRoot()
+FileBase &FileSystem::OpenRoot()
 {
-	auto Root = new Directory(this);
+	auto Root = new FileBase(this);
 	Root->ClusterBase = BS->RootClusterNumber;
+	Root->Property.Directory = 1;
 	Root->Load();
 	return *Root;
 }
 
+inline uint8_t LFNChksum(const uint8_t *Filename)
+{
+	uint8_t hash = 0;
+	for (int i = 0; i < 11; i++)
+		hash = (hash & 1 ? 0x80 : 0) + (hash >> 1) + *Filename++;
+	return hash;
+}
 std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> utf8_utf16_cvt;
 FileBase::FileBase() : Data(NULL), ClusterBase(2), FileSize(0) {}
 FileBase::FileBase(FileSystem *fs) : FS(fs) { FileBase(); }
 FileBase::~FileBase() {}
-uint32_t FileBase::Load()
+FileBase &FileBase::Load()
 {
 	uint32_t cnt = 0;
+
+	// Load file to memory
 	for (uint32_t i = ClusterBase; ; i = FS->FAT[i])
 	{
 		cnt++;
@@ -56,7 +66,39 @@ uint32_t FileBase::Load()
 		memcpy(Data + cnt * FS->BytesPerCluster, FS->OffsetByCluster(i), FS->BytesPerCluster);
 		if (!IsUsed(FS->FAT[i])) break;
 	}
-	return cnt;
+	if (!Property.Directory) return *this;
+
+	// Analyzing directory
+	FileSize = cnt * FS->BytesPerCluster;
+	FDT = (decltype(FDT))Data;
+	FileBase File(FS);
+	char16_t buf[MAX_FILENAME]; uint8_t hash = 0;
+	memset(buf, 0, sizeof(buf));
+	for (auto i = FDT; (void *)i < (void *)(Data + FileSize) && !i->IsNULL(); i++)
+	{
+		if (i->IsErased()) continue;
+		if (i->IsLFN())
+		{
+			auto &&Entry = i->LE;
+			hash = Entry.Checksum;
+			Entry.Filename(&buf[(Entry.Property.ID - 1) * 13]);
+		}
+		else
+		{
+			auto &&Entry = i->SE;
+			auto s = std::u16string(buf);
+			File.Property = Entry.Property;
+			File.Filename = (hash == LFNChksum((uint8_t *)Entry.Filename1)) ? utf8_utf16_cvt.to_bytes(s) : Entry.Filename();
+			File.FileSize = Entry.FileSize;
+			File.ClusterBase = MK_U32(Entry.HighClusterNumber, Entry.LowClusterNumber);
+			File.CreatedTime = Entry.CreatedTimestamp();
+			File.ModifiedTime = Entry.ModifiedTimestamp();
+			File.VisitedTime = Entry.VisitedTimestamp();
+			Child[File.Filename] = File;
+			memset(buf, 0, sizeof(buf)), hash = 0;
+		}
+	}
+	return *this;
 }
 FileBase &FileBase::PrintDebugInfo()
 {
@@ -72,46 +114,5 @@ FileBase &FileBase::PrintDebugInfo()
 		ctime(&ModifiedTime),
 		ctime(&VisitedTime)
 	);
-	return *this;
-}
-
-Directory::Directory() : FDT(NULL) {}
-Directory::Directory(const FileBase &raw) : FileBase(raw), FDT((decltype(FDT))Data) {}
-Directory &Directory::Load()
-{
-	FileSize = FileBase::Load() * FS->BytesPerCluster;
-	FDT = (decltype(FDT))Data;
-	FileBase File(FS); char16_t buf[MAX_FILENAME];
-	memset(buf, 0, sizeof(buf));
-	for (auto i = FDT; (void *)i < (void *)(Data + FileSize) && !i->IsNULL(); i++)
-	{
-		if (i->IsErased()) continue;
-		if (i->IsLFN())
-		{
-			auto &&Entry = i->LE;
-			printf("Checksum %d: ID %d\n", Entry.Checksum, Entry.Property.ID);
-			Entry.Filename(&buf[(Entry.Property.ID - 1) * 13]);
-		}
-		else
-		{
-			auto &&Entry = i->SE;
-			auto s = std::u16string(buf);
-			File.Filename = buf[0] ? utf8_utf16_cvt.to_bytes(s) : Entry.Filename();
-			File.FileSize = Entry.FileSize;
-			File.ClusterBase = MK_U32(Entry.HighClusterNumber, Entry.LowClusterNumber);
-			File.CreatedTime = Entry.CreatedTimestamp();
-			File.ModifiedTime = Entry.ModifiedTimestamp();
-			File.VisitedTime = Entry.VisitedTimestamp();
-			Child[File.Filename] = File;
-			memset(buf, 0, sizeof(buf));
-		}
-	}
-	return *this;
-}
-
-File::File(const FileBase &raw) : FileBase(raw) {}
-File &File::Load()
-{
-	FileBase::Load();
 	return *this;
 }
