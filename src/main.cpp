@@ -6,7 +6,11 @@ FileSystem FS(raw_img);
 int main()
 {
 	auto Root = FS.OpenRoot();
-	auto sub = Directory(Root.Load().Child["SubDataLongName"]);
+	Root.Load();
+	auto sub = Directory(Root.Child["SubDataLongName"]);
 	sub.Load();
+	auto Text = File(Root.Child["test.txt"]);
+	Text.Load();
+	printf("%s", Text.Raw());
 	return 0;
 }

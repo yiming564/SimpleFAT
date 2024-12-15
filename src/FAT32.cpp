@@ -108,3 +108,10 @@ Directory &Directory::Load()
 	}
 	return *this;
 }
+
+File::File(const FileBase &raw) : FileBase(raw) {}
+File &File::Load()
+{
+	FileBase::Load();
+	return *this;
+}

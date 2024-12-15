@@ -223,7 +223,6 @@ public:
 struct File : public FileBase
 {
 public:
-	File();
 	File(const FileBase &raw);
 	inline const uint8_t *Raw() const { return Data; }
 	File &Load();
