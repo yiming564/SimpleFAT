@@ -6,7 +6,7 @@ FileSystem FS(raw_img);
 
 inline FileBase &PrintFile(FileBase &File, std::string path)
 {
-	printf("[%s]: \n", (path + "/" + File.Filename).c_str());
+	printf("[%s]: \n", (path + File.Filename).c_str());
 	auto raw = File.Raw();
 	for (uint32_t i = 0; i < File.FileSize; i++)
 		putchar(raw[i]);
@@ -20,7 +20,7 @@ void dfs(FileBase &File, std::string path = "")
 	if (File.Property.Directory)
 	{
 		for (auto &&[Filename, Child] : File.Child)
-			if (Filename != "." && Filename != "..") dfs(Child, path + "/" + File.Filename);
+			if (Filename != "." && Filename != "..") dfs(Child, path + File.Filename + "/");
 	}
 	else PrintFile(File, path);
 }

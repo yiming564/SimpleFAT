@@ -51,8 +51,13 @@ FileBase::FileBase(FileSystem *fs) : FS(fs) { FileBase(); }
 FileBase::~FileBase() {}
 FileBase &FileBase::Load()
 {
-	uint32_t cnt = 0;
+	if (ClusterBase == 0)
+	{
+		Data = NULL, FDT = NULL;	// This file is empty
+		return *this;
+	}
 
+	uint32_t cnt = 0;
 	// Load file to memory
 	for (uint32_t i = ClusterBase; ; i = FS->FAT[i])
 	{
