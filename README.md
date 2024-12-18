@@ -17,7 +17,7 @@
 
 ## Demo test:
 
-1. `sudo apt install build-essential g++ mtools`
+1. `sudo apt install build-essential g++ mtools dosfstools`
 2. 先运行脚本 `sandbox/init.sh` 创建镜像 `raw.img`，再运行脚本 `sandbox/sync.sh` 将 `sandbox/data/` 下的文件写入到镜像中。
 3. `make run`。
 
